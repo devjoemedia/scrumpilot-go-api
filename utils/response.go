@@ -51,5 +51,8 @@ func Error(w http.ResponseWriter, status int, msg string) {
 		Success: false,
 		Status:  status,
 	}
-	json.NewEncoder(w).Encode(resp)
+	// json.NewEncoder(w).Encode(resp)
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		http.Error(w, "failed to encode error response", http.StatusInternalServerError)
+	}
 }

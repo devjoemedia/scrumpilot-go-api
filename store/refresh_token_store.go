@@ -13,9 +13,12 @@ type RefreshTokenStore struct {
 	db *gorm.DB
 }
 
-func NewRefreshTokenStore(db *gorm.DB) *RefreshTokenStore {
-	db.AutoMigrate(&models.RefreshToken{})
-	return &RefreshTokenStore{db: db}
+func NewRefreshTokenStore(db *gorm.DB) (*RefreshTokenStore, error) {
+	if err := db.AutoMigrate(&models.RefreshToken{}); err != nil {
+		return nil, err
+	}
+
+	return &RefreshTokenStore{db: db}, nil
 }
 
 func (s *RefreshTokenStore) Create(ctx context.Context, token *models.RefreshToken) error {

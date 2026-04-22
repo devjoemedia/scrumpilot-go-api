@@ -62,12 +62,12 @@ func GetUserID(r *http.Request) uint {
 
 func GetUserIDAndEmailFromRequest(r *http.Request) (uint, string, error) {
 	id, ok := r.Context().Value(ContextUserID).(uint)
-	if ok != true {
+	if !ok {
 		return 0, "", fmt.Errorf("user id not found in context")
 	}
 
 	email, ok := r.Context().Value(ContextUserEmail).(string)
-	if ok != true {
+	if !ok {
 		return 0, "", fmt.Errorf("email not found in context")
 	}
 

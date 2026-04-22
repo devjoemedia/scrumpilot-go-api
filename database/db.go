@@ -30,6 +30,8 @@ func Connect() {
 	log.Println("✅ Database connected successfully")
 
 	// Creates table for models in db
-	Migrate()
+	if err := Migrate(); err != nil {
+		log.Fatal("❌ Failed to migrate database:", err)
+	}
 	fmt.Println("✅ migrated database successfully")
 }
