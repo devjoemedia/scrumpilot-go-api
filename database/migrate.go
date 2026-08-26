@@ -7,6 +7,7 @@ func Migrate() error {
 		&models.User{},
 		&models.Todo{},
 		&models.Ticket{},
+		&models.Comment{},
 		&models.RefreshToken{},
 	); err != nil {
 		return err
