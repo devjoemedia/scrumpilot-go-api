@@ -49,15 +49,17 @@ func CreateTicket(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ticket := models.Ticket{
-		Title:       req.Title,
-		Description: req.Description,
-		Status:      req.Status,
-		Priority:    req.Priority,
-		ReporterID:  userID,
-		AssigneeID:  nil,
+		Title:        req.Title,
+		Description:  req.Description,
+		Status:       req.Status,
+		Priority:     req.Priority,
+		CreatedByID:  userID,
+		AssigneeID:   nil,
+		AssignedByID: nil,
 	}
 	if req.AssigneeID != nil {
 		ticket.AssigneeID = req.AssigneeID
+		ticket.AssignedByID = &userID
 	}
 
 	ctx := r.Context()
@@ -68,9 +70,10 @@ func CreateTicket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 🔥 IMPORTANT: Reload with relations
+	// IMPORTANT: Reload with relations
 	if err := database.DB.WithContext(ctx).
-		Preload("Reporter").
+		Preload("CreatedBy").
+		Preload("AssignedBy").
 		Preload("Assignee").
 		First(&ticket, ticket.ID).Error; err != nil {
 		utils.Error(w, http.StatusInternalServerError, "Failed to load ticket relations")
@@ -131,11 +134,19 @@ func GetTickets(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	var reporterID *uint
-	if v := r.URL.Query().Get("reporter_id"); v != "" {
+	var createdByID *uint
+	if v := r.URL.Query().Get("created_by_id"); v != "" {
 		if id, err := strconv.Atoi(v); err == nil {
 			u := uint(id)
-			reporterID = &u
+			createdByID = &u
+		}
+	}
+
+	var assignedByID *uint
+	if v := r.URL.Query().Get("assigned_by_id"); v != "" {
+		if id, err := strconv.Atoi(v); err == nil {
+			u := uint(id)
+			assignedByID = &u
 		}
 	}
 
@@ -155,8 +166,11 @@ func GetTickets(w http.ResponseWriter, r *http.Request) {
 	if assigneeID != nil {
 		query = query.Where("assignee_id = ?", *assigneeID)
 	}
-	if reporterID != nil {
-		query = query.Where("reporter_id = ?", *reporterID)
+	if assignedByID != nil {
+		query = query.Where("assigned_by_id = ?", *assignedByID)
+	}
+	if createdByID != nil {
+		query = query.Where("created_by_id = ?", *createdByID)
 	}
 
 	// Count total tickets
@@ -168,7 +182,8 @@ func GetTickets(w http.ResponseWriter, r *http.Request) {
 
 	// Execute query
 	if err := query.
-		Preload("Reporter").
+		Preload("CreatedBy").
+		Preload("AssignedBy").
 		Preload("Assignee").
 		Offset((page - 1) * size).
 		Limit(size).
@@ -214,7 +229,11 @@ func GetTicketByID(w http.ResponseWriter, r *http.Request) {
 
 	// Ticket Slice
 	var ticket models.Ticket
-	if err := database.DB.WithContext(ctx).First(&ticket, uint(id)).Error; err != nil {
+	if err := database.DB.WithContext(ctx).
+		Preload("CreatedBy").
+		Preload("AssignedBy").
+		Preload("Comments").
+		Preload("Assignee").First(&ticket, uint(id)).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			utils.Error(w, http.StatusNotFound, "Ticket not found")
 			return
@@ -232,20 +251,145 @@ func GetTicketByID(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// UpdateTodo godoc
-// @Summary      Update an existing todo
-// @Description  Update a todo item by ID
-// @Tags         todos
+// GetTicketCommentsByID godoc
+// @Summary      Get ticket comments by ID
+// @Description  Fetch a specific ticket comments by its ID
+// @Tags         tickets
+// @Produce      json
+// @Security 		 BearerAuth
+// @Param        id   path    int  true  "Ticket ID"
+// @Success      200  {object} api_response.GetTicketResponse
+// @Failure      400  {string} string     "Invalid ID"
+// @Failure      404  {string} string     "Ticket not found"
+// @Router       /api/v1/tickets/{id}/comments [get]
+func GetTicketCommentsByID(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	idStr := chi.URLParam(r, "id")
+	id, err := strconv.ParseInt(idStr, 10, 32)
+	if err != nil {
+		utils.Error(w, http.StatusBadRequest, "Invalid ID format")
+		return
+	}
+
+	// verify ticket exists
+	var ticket models.Ticket
+	if err := database.DB.WithContext(ctx).
+		First(&ticket, id).Error; err != nil {
+
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			utils.Error(w, http.StatusNotFound, "Ticket not found")
+			return
+		}
+
+		utils.Error(w, http.StatusInternalServerError, "Database error")
+		return
+	}
+
+	// Initialize comments slice
+	var comments []models.Comment
+
+	if err := database.DB.WithContext(ctx).
+		Model(&models.Comment{}).
+		Where("ticket_id = ?", uint(id)).
+		Preload("User").
+		Find(&comments).Error; err != nil {
+
+		utils.Error(w, http.StatusInternalServerError, "Database error")
+		return
+	}
+
+	utils.JSON(w, http.StatusOK, api_response.GetCommentsResponse{
+		Success:  true,
+		Status:   http.StatusOK,
+		Message:  "success",
+		Comments: comments,
+	})
+}
+
+// AssignTicket godoc
+// @Summary      Assign an existing ticket
+// @Description  Assign a ticket item by ID
+// @Tags         tickets
 // @Accept       json
 // @Produce      json
 // @Security 		 BearerAuth
-// @Param        id     path    int  true  "Todo ID"
-// @Param        body   body    models.UpdateTodoRequest  true  "Todo object"
-// @Success      200    {object} api_response.UpdateTodoResponse
+// @Param        id     path    int  true  "Ticket ID"
+// @Param        body   body    models.UpdateTicketRequest  true  "Ticket object"
+// @Success      200    {object} api_response.UpdateTicketResponse
 // @Failure      400    {string} string  "Invalid JSON"
-// @Failure      404    {string} string  "Todo not found"
-// @Router       /api/v1/todos/{id} [put]
-// @Router       /api/v1/todos/{id} [patch]
+// @Failure      404    {string} string  "Ticket not found"
+// @Router       /api/v1/tickets/{id}/assign [patch]
+func AssignTicket(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	idStr := chi.URLParam(r, "id")
+	id, err := strconv.ParseInt(idStr, 10, 32)
+	if err != nil {
+		utils.Error(w, http.StatusBadRequest, "Invalid ID format")
+		return
+	}
+
+	var req models.UpdateTicketRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		utils.Error(w, http.StatusBadRequest, "Invalid JSON")
+		return
+	}
+
+	userID, _, err := middleware.GetUserIDAndEmailFromRequest(r)
+	if err != nil {
+		utils.Error(w, http.StatusInternalServerError, "Failed to get user ID and email")
+		return
+	}
+
+	// Ticket Slice
+	var ticket models.Ticket
+	if err := database.DB.WithContext(ctx).First(&ticket, uint(id)).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			utils.Error(w, http.StatusNotFound, "Ticket not found")
+			return
+		}
+		utils.Error(w, http.StatusInternalServerError, "Database error")
+		return
+	}
+
+	// Update fields
+	if req.AssigneeID != nil {
+		ticket.AssigneeID = req.AssigneeID
+		ticket.AssignedByID = &userID
+	}
+
+	// save updates
+	result := database.DB.WithContext(ctx).Save(&ticket).Error
+	if result != nil {
+		utils.Error(w, http.StatusInternalServerError, "Failed to update ticket")
+		return
+	}
+
+	// Response
+	response := api_response.UpdateTicketResponse{
+		Success: true,
+		Status:  http.StatusOK,
+		Message: "Ticket updated successfully",
+		Ticket:  &ticket,
+	}
+
+	utils.JSON(w, http.StatusOK, response)
+}
+
+// UpdateTicket godoc
+// @Summary      Update an existing ticket
+// @Description  Update a ticket item by ID
+// @Tags         tickets
+// @Accept       json
+// @Produce      json
+// @Security 		 BearerAuth
+// @Param        id     path    int  true  "Ticket ID"
+// @Param        body   body    models.AssignTicketRequest  true  "Ticket object"
+// @Success      200    {object} api_response.UpdateTicketResponse
+// @Failure      400    {string} string  "Invalid JSON"
+// @Failure      404    {string} string  "Ticket not found"
+// @Router       /api/v1/tickets/{id} [patch]
 func UpdateTicket(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -259,6 +403,12 @@ func UpdateTicket(w http.ResponseWriter, r *http.Request) {
 	var req models.UpdateTicketRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		utils.Error(w, http.StatusBadRequest, "Invalid JSON")
+		return
+	}
+
+	userID, _, err := middleware.GetUserIDAndEmailFromRequest(r)
+	if err != nil {
+		utils.Error(w, http.StatusInternalServerError, "Failed to get user ID and email")
 		return
 	}
 
@@ -288,6 +438,7 @@ func UpdateTicket(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.AssigneeID != nil {
 		ticket.AssigneeID = req.AssigneeID
+		ticket.AssignedByID = &userID
 	}
 
 	// save updates

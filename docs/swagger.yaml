@@ -12,6 +12,17 @@ definitions:
         description: always "Bearer"
         type: string
     type: object
+  api_response.CreateCommentResponse:
+    properties:
+      comment:
+        $ref: '#/definitions/models.Comment'
+      message:
+        type: string
+      status:
+        type: integer
+      success:
+        type: boolean
+    type: object
   api_response.CreateTicketResponse:
     properties:
       message:
@@ -33,6 +44,15 @@ definitions:
         type: boolean
       todo:
         $ref: '#/definitions/models.Todo'
+    type: object
+  api_response.DeleteCommentResponse:
+    properties:
+      message:
+        type: string
+      status:
+        type: integer
+      success:
+        type: boolean
     type: object
   api_response.DeleteTicketResponse:
     properties:
@@ -56,6 +76,32 @@ definitions:
     properties:
       message:
         type: string
+      status:
+        type: integer
+      success:
+        type: boolean
+    type: object
+  api_response.GetCommentResponse:
+    properties:
+      comment:
+        $ref: '#/definitions/models.Comment'
+      message:
+        type: string
+      status:
+        type: integer
+      success:
+        type: boolean
+    type: object
+  api_response.GetCommentsResponse:
+    properties:
+      comments:
+        items:
+          $ref: '#/definitions/models.Comment'
+        type: array
+      message:
+        type: string
+      pagination:
+        $ref: '#/definitions/types.Pagination'
       status:
         type: integer
       success:
@@ -185,6 +231,28 @@ definitions:
       user:
         $ref: '#/definitions/models.User'
     type: object
+  api_response.UpdateCommentResponse:
+    properties:
+      comment:
+        $ref: '#/definitions/models.Comment'
+      message:
+        type: string
+      status:
+        type: integer
+      success:
+        type: boolean
+    type: object
+  api_response.UpdateTicketResponse:
+    properties:
+      message:
+        type: string
+      status:
+        type: integer
+      success:
+        type: boolean
+      ticket:
+        $ref: '#/definitions/models.Ticket'
+    type: object
   api_response.UpdateTodoResponse:
     properties:
       message:
@@ -209,8 +277,50 @@ definitions:
       user:
         $ref: '#/definitions/models.User'
     type: object
+  models.AssignTicketRequest:
+    properties:
+      assignee_id:
+        type: integer
+    required:
+    - assignee_id
+    type: object
+  models.Comment:
+    properties:
+      comment:
+        maxLength: 1000
+        type: string
+      created_at:
+        type: string
+      id:
+        type: integer
+      ticket:
+        $ref: '#/definitions/models.Ticket'
+      ticket_id:
+        type: integer
+      updated_at:
+        type: string
+      user:
+        $ref: '#/definitions/models.User'
+      user_id:
+        type: integer
+    required:
+    - comment
+    type: object
+  models.CreateCommentRequest:
+    properties:
+      comment:
+        maxLength: 1000
+        type: string
+      ticket_id:
+        type: integer
+    required:
+    - comment
+    - ticket_id
+    type: object
   models.CreateTicketRequest:
     properties:
+      assigned_by_id:
+        type: integer
       assignee_id:
         type: integer
       description:
@@ -270,12 +380,26 @@ definitions:
     type: object
   models.Ticket:
     properties:
+      assigned_by:
+        $ref: '#/definitions/models.User'
+      assigned_by_id:
+        description: Who assigned the ticket
+        type: integer
       assignee:
         $ref: '#/definitions/models.User'
       assignee_id:
         type: integer
+      comments:
+        items:
+          $ref: '#/definitions/models.Comment'
+        type: array
       created_at:
         type: string
+      created_by_id:
+        description: Who created the ticket
+        type: integer
+      createdBy:
+        $ref: '#/definitions/models.User'
       description:
         maxLength: 1000
         type: string
@@ -287,10 +411,6 @@ definitions:
         - medium
         - high
         type: string
-      reporter:
-        $ref: '#/definitions/models.User'
-      reporter_id:
-        type: integer
       status:
         enum:
         - open
@@ -319,6 +439,41 @@ definitions:
       title:
         type: string
       updated_at:
+        type: string
+    type: object
+  models.UpdateCommentRequest:
+    properties:
+      comment:
+        type: string
+      ticket_id:
+        type: integer
+    required:
+    - ticket_id
+    type: object
+  models.UpdateTicketRequest:
+    properties:
+      assigned_by_id:
+        type: integer
+      assignee_id:
+        type: integer
+      description:
+        maxLength: 1000
+        type: string
+      priority:
+        enum:
+        - low
+        - medium
+        - high
+        type: string
+      status:
+        enum:
+        - open
+        - in_progress
+        - closed
+        type: string
+      title:
+        maxLength: 255
+        minLength: 1
         type: string
     type: object
   models.UpdateTodoRequest:
@@ -456,6 +611,167 @@ paths:
       summary: Register a new user
       tags:
       - auth
+  /api/v1/comments:
+    get:
+      description: Retrieve comments with optional pagination (page, size) and filter
+        by user_id
+      parameters:
+      - description: 'Page number (default: 1)'
+        in: query
+        name: page
+        type: integer
+      - description: 'Page size (default: 10, max: 100)'
+        in: query
+        name: size
+        type: integer
+      - description: Filter by user_id
+        in: query
+        name: user_id
+        type: integer
+      - description: Filter by priority
+        in: query
+        name: priority
+        type: string
+      - description: Filter by assignee_id
+        in: query
+        name: assignee_id
+        type: integer
+      - description: Filter by reporter_id
+        in: query
+        name: reporter_id
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api_response.GetCommentsResponse'
+      security:
+      - BearerAuth: []
+      summary: Get comments with pagination and filters
+      tags:
+      - comments
+    post:
+      consumes:
+      - application/json
+      description: Create a new comment item
+      parameters:
+      - description: Comment object
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/models.CreateCommentRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api_response.CreateCommentResponse'
+        "400":
+          description: Invalid JSON
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Create a new comment
+      tags:
+      - comments
+  /api/v1/comments/{id}:
+    delete:
+      description: Delete a specific comment by its ID
+      parameters:
+      - description: Comment ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api_response.DeleteCommentResponse'
+        "400":
+          description: Invalid ID
+          schema:
+            type: string
+        "404":
+          description: Comment not found
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Delete comment by ID
+      tags:
+      - comments
+    get:
+      description: Fetch a specific comment by its ID
+      parameters:
+      - description: Comment ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api_response.GetCommentResponse'
+        "400":
+          description: Invalid ID
+          schema:
+            type: string
+        "404":
+          description: Comment not found
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Get comment by ID
+      tags:
+      - comments
+    patch:
+      consumes:
+      - application/json
+      description: Update a comment item by ID
+      parameters:
+      - description: Comment ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Comment object
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/models.UpdateCommentRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api_response.UpdateCommentResponse'
+        "400":
+          description: Invalid JSON
+          schema:
+            type: string
+        "404":
+          description: Comment not found
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Update an existing comment
+      tags:
+      - comments
   /api/v1/tickets:
     get:
       description: Retrieve tickets with optional pagination (page, size) and filter
@@ -581,6 +897,108 @@ paths:
       summary: Get ticket by ID
       tags:
       - tickets
+    patch:
+      consumes:
+      - application/json
+      description: Update a ticket item by ID
+      parameters:
+      - description: Ticket ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Ticket object
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/models.AssignTicketRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api_response.UpdateTicketResponse'
+        "400":
+          description: Invalid JSON
+          schema:
+            type: string
+        "404":
+          description: Ticket not found
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Update an existing ticket
+      tags:
+      - tickets
+  /api/v1/tickets/{id}/assign:
+    patch:
+      consumes:
+      - application/json
+      description: Assign a ticket item by ID
+      parameters:
+      - description: Ticket ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Ticket object
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/models.UpdateTicketRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api_response.UpdateTicketResponse'
+        "400":
+          description: Invalid JSON
+          schema:
+            type: string
+        "404":
+          description: Ticket not found
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Assign an existing ticket
+      tags:
+      - tickets
+  /api/v1/tickets/{id}/comments:
+    get:
+      description: Fetch a specific ticket comments by its ID
+      parameters:
+      - description: Ticket ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api_response.GetTicketResponse'
+        "400":
+          description: Invalid ID
+          schema:
+            type: string
+        "404":
+          description: Ticket not found
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Get ticket comments by ID
+      tags:
+      - tickets
   /api/v1/todos:
     get:
       description: Retrieve todos with optional pagination (page, size) and filter
@@ -695,42 +1113,6 @@ paths:
       tags:
       - todos
     patch:
-      consumes:
-      - application/json
-      description: Update a todo item by ID
-      parameters:
-      - description: Todo ID
-        in: path
-        name: id
-        required: true
-        type: integer
-      - description: Todo object
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/models.UpdateTodoRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/api_response.UpdateTodoResponse'
-        "400":
-          description: Invalid JSON
-          schema:
-            type: string
-        "404":
-          description: Todo not found
-          schema:
-            type: string
-      security:
-      - BearerAuth: []
-      summary: Update an existing todo
-      tags:
-      - todos
-    put:
       consumes:
       - application/json
       description: Update a todo item by ID

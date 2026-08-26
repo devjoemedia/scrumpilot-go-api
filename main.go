@@ -44,6 +44,7 @@ func main() {
 		r.Mount("/api/v1/todos", routes.TodoRoute())
 		r.Mount("/api/v1/users", routes.UserRoutes())
 		r.Mount("/api/v1/tickets", routes.TicketRoute())
+		r.Mount("/api/v1/comments", routes.CommentRoute())
 	})
 
 	port := ":" + config.AppConfig.AppPort

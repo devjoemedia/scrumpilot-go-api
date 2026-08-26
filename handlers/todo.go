@@ -196,7 +196,6 @@ func GetTodoByID(w http.ResponseWriter, r *http.Request) {
 // @Success      200    {object} api_response.UpdateTodoResponse
 // @Failure      400    {string} string  "Invalid JSON"
 // @Failure      404    {string} string  "Todo not found"
-// @Router       /api/v1/todos/{id} [put]
 // @Router       /api/v1/todos/{id} [patch]
 func UpdateTodo(w http.ResponseWriter, r *http.Request) {
 	// Get todo ID from URL params
